@@ -12,7 +12,7 @@ def extract_po_details(pdf_file):
     text = "\n".join([page.get_text() for page in doc])
 
     details = {
-        "po_number": re.search(r"Purchase Order:\s*(\S+)", text),
+        "po_number": re.search(r"Purchase Order[^\n:]*[:\s]*([A-Z0-9\-]+)", text, re.IGNORECASE),
         "job_info": re.search(r"Project:\s*(.*?)\nLot:\s*(.*?)\n", text),
         "description": re.search(r"Craft:\s*4440\s*-\s*(.*?)\n", text),
         "amount": re.search(r"Total:\s*\$?([0-9,.]+)", text),
@@ -67,8 +67,8 @@ def generate_invoice(data, original_po, invoice_number):
     invoice_pdf.ln(10)
     invoice_pdf.cell(200, 10, txt="THANK YOU FOR YOUR BUSINESS!", ln=1, align="C")
 
-    buffer = BytesIO()
-    invoice_pdf.output(buffer)
+    output_str = invoice_pdf.output(dest='S').encode('latin1')
+    buffer = BytesIO(output_str)
 
     # Append original PO pages
     result_pdf = fitz.open()
