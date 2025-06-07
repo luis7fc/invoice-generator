@@ -11,8 +11,18 @@ def extract_po_details(pdf_file):
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
     text = "\n".join([page.get_text() for page in doc])
 
+    # PO number extraction (aggressively avoids 'Retention')
+    po_match = re.search(r"(?i)Purchase Order:\s*([A-Z0-9\-]+)", text)
+    if not po_match:
+        line_match = re.search(r"(?i)Purchase Order:\s*(.*)", text)
+        if line_match:
+            line = line_match.group(1).strip()
+            po_in_line = re.search(r"[A-Z0-9]{4,}-[A-Z0-9]{1,}-\d{6}", line)
+            if po_in_line:
+                po_match = po_in_line
+
     details = {
-        "po_number": re.search(r"(?i)Purchase Order:\s*([A-Z0-9\-]+)", text.replace("\n", " ")),
+        "po_number": po_match,
         "job_info": re.search(r"Project:\s*(.*?)\nLot:\s*(.*?)\n", text),
         "description": re.search(r"Craft:\s*4440\s*-\s*(.*?)\n", text),
         "amount": re.search(r"Total:\s*\$?([0-9,.]+)", text),
@@ -21,7 +31,7 @@ def extract_po_details(pdf_file):
 
     result = {}
     if details["po_number"]:
-        result["po_number"] = details["po_number"].group(1)
+        result["po_number"] = details["po_number"].group(0)
     if details["job_info"]:
         result["job"] = details["job_info"].group(1).strip()
         result["lot"] = details["job_info"].group(2).strip()
