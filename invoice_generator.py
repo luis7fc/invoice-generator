@@ -12,7 +12,7 @@ def extract_po_details(pdf_file):
     text = "\n".join([page.get_text() for page in doc])
 
     details = {
-        "po_number": re.search(r"Purchase Order[^\n:]*[:\s]*([A-Z0-9\-]+)", text, re.IGNORECASE),
+        "po_number": re.search(r"(?i)Purchase Order:\s*([A-Z0-9\-]+)", text.replace("\n", " ")),
         "job_info": re.search(r"Project:\s*(.*?)\nLot:\s*(.*?)\n", text),
         "description": re.search(r"Craft:\s*4440\s*-\s*(.*?)\n", text),
         "amount": re.search(r"Total:\s*\$?([0-9,.]+)", text),
