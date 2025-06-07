@@ -15,7 +15,7 @@ def extract_po_details(pdf_file):
     po_number = None
     match = re.search(r"[A-Za-z0-9]{4,}\s*-\s*[A-Za-z0-9]{1,}\s*-\s*\d{6}", text, re.IGNORECASE)
     if match:
-        po_number = match.group(0).replace(" ", "")  # remove accidental spaces
+        po_number = match.group(0).replace(" ", "")
 
     # Fallback to line-by-line search if needed
     if not po_number:
@@ -83,18 +83,46 @@ def generate_invoice(data, original_po, invoice_number):
     invoice_pdf.add_page()
     invoice_pdf.set_font("Arial", size=12)
 
+    # Header
+    invoice_pdf.set_font("Arial", 'B', 16)
     invoice_pdf.cell(200, 10, txt="INVOICE", ln=1, align="C")
-    invoice_pdf.cell(100, 10, txt=f"Invoice #: {invoice_number}", ln=1)
+    invoice_pdf.set_font("Arial", size=12)
+    invoice_pdf.cell(100, 10, txt=f"Invoice #: {invoice_number}", ln=0)
     invoice_pdf.cell(100, 10, txt=f"Invoice Date: {datetime.today().strftime('%m/%d/%Y')}", ln=1)
-    invoice_pdf.cell(100, 10, txt="Terms: NET30", ln=1)
+    invoice_pdf.cell(100, 10, txt=f"Terms: NET30", ln=1)
 
-    invoice_pdf.cell(100, 10, txt="\nVendor: I'll Klean It", ln=1)
-    invoice_pdf.cell(100, 10, txt=f"PO#: {data.get('po_number', 'N/A')}", ln=1)
-    invoice_pdf.cell(100, 10, txt=f"Description: {data.get('description', 'Interior Cleaning')}", ln=1)
-    invoice_pdf.cell(100, 10, txt=f"Amount: ${data.get('amount', '0.00')}", ln=1)
+    # Logo Placeholder
+    invoice_pdf.set_font("Arial", 'B', 14)
+    invoice_pdf.cell(200, 10, txt="I'll Klean It", ln=1, align="L")
+
+    # Customer Info
+    invoice_pdf.set_font("Arial", size=12)
+    invoice_pdf.cell(200, 10, txt="Customer: Granville Homes", ln=1)
+    invoice_pdf.cell(200, 10, txt="1396 W Herndon", ln=1)
+    invoice_pdf.cell(200, 10, txt="Fresno, CA 93711", ln=1)
+    invoice_pdf.ln(5)
+
+    # Invoice Table
+    invoice_pdf.set_font("Arial", 'B', 12)
+    invoice_pdf.cell(60, 10, txt="PO#", border=1)
+    invoice_pdf.cell(80, 10, txt="Description", border=1)
+    invoice_pdf.cell(40, 10, txt="Amount", border=1, ln=1)
+
+    invoice_pdf.set_font("Arial", size=12)
+    invoice_pdf.cell(60, 10, txt=data.get('po_number', 'N/A'), border=1)
+    invoice_pdf.cell(80, 10, txt=data.get('description', 'Interior Cleaning'), border=1)
+    invoice_pdf.cell(40, 10, txt=f"${data.get('amount', '0.00')}", border=1, ln=1)
+
+    invoice_pdf.cell(140, 10, txt="", border=0)
+    invoice_pdf.cell(40, 10, txt=f"${data.get('amount', '0.00')}", border=1, ln=1)
 
     invoice_pdf.ln(10)
+    invoice_pdf.set_font("Arial", 'B', 12)
     invoice_pdf.cell(200, 10, txt="THANK YOU FOR YOUR BUSINESS!", ln=1, align="C")
+
+    # Signature
+    invoice_pdf.set_font("Courier", 'I', 18)
+    invoice_pdf.cell(200, 20, txt="Luis Moreno", ln=1, align="C")
 
     output_str = invoice_pdf.output(dest='S').encode('latin1')
     buffer = BytesIO(output_str)
