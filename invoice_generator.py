@@ -11,29 +11,34 @@ def extract_po_details(pdf_file):
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
     text = "\n".join([page.get_text() for page in doc])
 
-    # Extract PO number by scanning current and next 3 lines
+    # Try to find PO number in the entire text first
     po_number = None
-    for page in doc:
-        lines = page.get_text().splitlines()
-        for i, line in enumerate(lines):
-            if "Purchase Order" in line:
-                after = line.split("Purchase Order")[-1]
-                match = re.search(r"[A-Z0-9]{4,}-[A-Z0-9]{1,}-\d{6}", after)
-                if match:
-                    po_number = match.group(0)
-                    break
-                # Try the next 3 lines for PO number
-                for offset in range(1, 4):
-                    if i + offset < len(lines):
-                        next_line = lines[i + offset].strip()
-                        match = re.search(r"[A-Z0-9]{4,}-[A-Z0-9]{1,}-\d{6}", next_line)
-                        if match:
-                            po_number = match.group(0)
-                            break
-                if po_number:
-                    break
-        if po_number:
-            break
+    match = re.search(r"[A-Za-z0-9]{4,}\s*-\s*[A-Za-z0-9]{1,}\s*-\s*\d{6}", text, re.IGNORECASE)
+    if match:
+        po_number = match.group(0).replace(" ", "")  # remove accidental spaces
+
+    # Fallback to line-by-line search if needed
+    if not po_number:
+        for page in doc:
+            lines = page.get_text().splitlines()
+            for i, line in enumerate(lines):
+                if "Purchase Order" in line:
+                    after = line.split("Purchase Order")[-1]
+                    match = re.search(r"[A-Za-z0-9]{4,}\s*-\s*[A-Za-z0-9]{1,}\s*-\s*\d{6}", after, re.IGNORECASE)
+                    if match:
+                        po_number = match.group(0).replace(" ", "")
+                        break
+                    for offset in range(1, 4):
+                        if i + offset < len(lines):
+                            next_line = lines[i + offset].strip()
+                            match = re.search(r"[A-Za-z0-9]{4,}\s*-\s*[A-Za-z0-9]{1,}\s*-\s*\d{6}", next_line, re.IGNORECASE)
+                            if match:
+                                po_number = match.group(0).replace(" ", "")
+                                break
+                    if po_number:
+                        break
+            if po_number:
+                break
 
     details = {
         "po_number": po_number,
