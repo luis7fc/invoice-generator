@@ -2,3 +2,5 @@ streamlit
 PyMuPDF
 fpdf
 PyPDF2
+python-docx
+docx2pdf
