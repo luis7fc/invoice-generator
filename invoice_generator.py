@@ -86,7 +86,7 @@ def get_next_invoice_number():
     return f"INV-{current}"
 
 # ─── Generate Waiver PDF ───────────────────────────────────────────────────
-def generate_waiver_pdf(job_location, amount):
+def generate_waiver_pdf(job_location, amount, through_date):
     waiver_template_path = "waiver_template.pdf"
     waiver_reader = PdfReader(waiver_template_path)
     waiver_writer = PdfWriter()
@@ -98,6 +98,9 @@ def generate_waiver_pdf(job_location, amount):
     overlay.set_font("Arial", size=12)
     overlay.set_xy(45, 53)
     overlay.cell(100, 10, txt=job_location)
+    
+    overlay.set_xy(140, 53)
+    overlay.cell(60, 10, txt=through_date)  # adjust XY as needed
 
     overlay.set_xy(50, 66)
     overlay.cell(100, 10, txt=f"${amount}")
@@ -119,6 +122,9 @@ def generate_waiver_pdf(job_location, amount):
 
 # ─── PDF Invoice Generator ─────────────────────────────────────────────────
 def generate_invoice(data, original_po, invoice_number):
+    through_date = datetime.today().strftime('%m/%d/%Y')
+    waiver_pdf = generate_waiver_pdf(data.get('job_location', 'Unknown'), data.get('amount', '0.00'), through_date)
+
     invoice_pdf = FPDF()
     invoice_pdf.add_page()
     invoice_pdf.set_font("Arial", size=12)
@@ -162,7 +168,7 @@ def generate_invoice(data, original_po, invoice_number):
     output_str = invoice_pdf.output(dest='S').encode('latin1')
     buffer = BytesIO(output_str)
 
-    waiver_pdf = generate_waiver_pdf(data.get('job_location', 'Unknown'), data.get('amount', '0.00'))
+    #waiver_pdf = generate_waiver_pdf(data.get('job_location', 'Unknown'), data.get('amount', '0.00'))
     
     result_pdf = fitz.open()
     result_pdf.insert_pdf(fitz.open(stream=buffer, filetype="pdf"))  # Invoice
