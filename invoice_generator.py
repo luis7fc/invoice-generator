@@ -210,17 +210,6 @@ if uploaded_files:
         description = st.text_input(f"Description for {uploaded_file.name}", value=extracted.get("description", ""), key=f"desc_{uploaded_file.name}")
         amount = st.text_input(f"Amount ($) for {uploaded_file.name}", value=extracted.get("amount", ""), key=f"amt_{uploaded_file.name}")
 
-        if st.button(f"Generate Invoice for {uploaded_file.name}"):
-            manual_data = {
-                "po_number": po_number,
-                "description": description,
-                "amount": amount,
-                "job_location": extracted.get("job_location", "Unknown")
-            }
-            invoice_number = get_next_invoice_number()
-            invoice_pdf = generate_invoice(manual_data, original_po, invoice_number)
-            st.download_button("Download Invoice PDF", data=invoice_pdf, file_name=f"{invoice_number}.pdf")
-
         manual_data = {
             "po_number": po_number,
             "description": description,
