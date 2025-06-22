@@ -7,6 +7,52 @@ from datetime import datetime
 from io import BytesIO
 import os
 from PyPDF2 import PdfReader, PdfWriter
+from docx import Document
+import tempfile
+from docx2pdf import convert  # make sure this is installed
+import shutil
+
+def generate_waiver_pdf_smart(job_location, amount, through_date, signature="LM"):
+    # Load template
+    template_path = "waiver_template.docx"
+    doc = Document(template_path)
+
+    # Replace placeholders
+    replacements = {
+        "{{job_location}}": job_location,
+        "{{through_date}}": through_date,
+        "{{amount}}": f"${amount}",
+        "{{signature}}": signature,
+        "{{signature_date}}": through_date,
+    }
+
+    for para in doc.paragraphs:
+        for key, val in replacements.items():
+            if key in para.text:
+                for run in para.runs:
+                    if key in run.text:
+                        run.text = run.text.replace(key, val)
+
+    # Save to temporary DOCX
+    temp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+    doc.save(temp_docx.name)
+
+    # Convert to PDF
+    temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    convert(temp_docx.name, temp_pdf.name)
+
+    # Read into BytesIO for merging
+    with open(temp_pdf.name, "rb") as f:
+        waiver_pdf = BytesIO(f.read())
+
+    # Clean up
+    temp_docx.close()
+    temp_pdf.close()
+    os.unlink(temp_docx.name)
+    os.unlink(temp_pdf.name)
+
+    return waiver_pdf
+
 
 # ─── Helper to Extract PO Info ─────────────────────────────────────────────
 def extract_po_details(pdf_file):
@@ -85,45 +131,15 @@ def get_next_invoice_number():
         f.truncate()
     return f"INV-{current}"
 
-# ─── Generate Waiver PDF ───────────────────────────────────────────────────
-def generate_waiver_pdf(job_location, amount, through_date):
-    waiver_template_path = "waiver_template.pdf"
-    waiver_reader = PdfReader(waiver_template_path)
-    waiver_writer = PdfWriter()
-
-    page = waiver_reader.pages[0]
-
-    overlay = FPDF()
-    overlay.add_page()
-    overlay.set_font("Arial", size=12)
-    overlay.set_xy(45, 53)
-    overlay.cell(100, 10, txt=job_location)
-    
-    overlay.set_xy(140, 53)
-    overlay.cell(60, 10, txt=through_date)  # adjust XY as needed
-
-    overlay.set_xy(50, 66)
-    overlay.cell(100, 10, txt=f"${amount}")
-
-    overlay.set_xy(50, 140)
-    overlay.set_font("Courier", 'I', 18)
-    overlay.cell(100, 10, txt="LM")
-
-    overlay_stream = BytesIO()
-    overlay_bytes = overlay.output(dest="S").encode("latin1")
-    overlay_stream = BytesIO(overlay_bytes)
-    overlay_reader = PdfReader(BytesIO(overlay_stream.getvalue()))
-    page.merge_page(overlay_reader.pages[0])
-
-    waiver_writer.add_page(page)
-    waiver_buffer = BytesIO()
-    waiver_writer.write(waiver_buffer)
-    return waiver_buffer
-
 # ─── PDF Invoice Generator ─────────────────────────────────────────────────
 def generate_invoice(data, original_po, invoice_number):
     through_date = datetime.today().strftime('%m/%d/%Y')
-    waiver_pdf = generate_waiver_pdf(data.get('job_location', 'Unknown'), data.get('amount', '0.00'), through_date)
+
+    waiver_pdf = generate_waiver_pdf_smart(
+        data.get("job_location", "Unknown"),
+        data.get("amount", "0.00"),
+        through_date
+    )
 
     invoice_pdf = FPDF()
     invoice_pdf.add_page()
@@ -167,8 +183,6 @@ def generate_invoice(data, original_po, invoice_number):
 
     output_str = invoice_pdf.output(dest='S').encode('latin1')
     buffer = BytesIO(output_str)
-
-    #waiver_pdf = generate_waiver_pdf(data.get('job_location', 'Unknown'), data.get('amount', '0.00'))
     
     result_pdf = fitz.open()
     result_pdf.insert_pdf(fitz.open(stream=buffer, filetype="pdf"))  # Invoice
