@@ -1,3 +1,4 @@
+
 import streamlit as st
 import fitz  # PyMuPDF
 import re
@@ -5,19 +6,18 @@ from fpdf import FPDF
 from datetime import datetime
 from io import BytesIO
 import os
+from PyPDF2 import PdfReader, PdfWriter
 
 # ─── Helper to Extract PO Info ─────────────────────────────────────────────
 def extract_po_details(pdf_file):
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
     text = "\n".join([page.get_text() for page in doc])
 
-    # Try to find PO number in the entire text first
     po_number = None
     match = re.search(r"[A-Za-z0-9]{4,}\s*-\s*[A-Za-z0-9]{1,}\s*-\s*\d{6}", text, re.IGNORECASE)
     if match:
         po_number = match.group(0).replace(" ", "")
 
-    # Fallback to line-by-line search if needed
     if not po_number:
         for page in doc:
             lines = page.get_text().splitlines()
@@ -77,13 +77,43 @@ def get_next_invoice_number():
         f.truncate()
     return f"INV-{current}"
 
+# ─── Generate Waiver PDF ───────────────────────────────────────────────────
+def generate_waiver_pdf(job_location, amount):
+    waiver_template_path = "waiver_template.pdf"
+    waiver_reader = PdfReader(waiver_template_path)
+    waiver_writer = PdfWriter()
+
+    page = waiver_reader.pages[0]
+
+    overlay = FPDF()
+    overlay.add_page()
+    overlay.set_font("Arial", size=12)
+    overlay.set_xy(45, 53)
+    overlay.cell(100, 10, txt=job_location)
+
+    overlay.set_xy(50, 66)
+    overlay.cell(100, 10, txt=f"${amount}")
+
+    overlay.set_xy(50, 140)
+    overlay.set_font("Courier", 'I', 18)
+    overlay.cell(100, 10, txt="LM")
+
+    overlay_stream = BytesIO()
+    overlay.output(overlay_stream)
+    overlay_reader = PdfReader(BytesIO(overlay_stream.getvalue()))
+    page.merge_page(overlay_reader.pages[0])
+
+    waiver_writer.add_page(page)
+    waiver_buffer = BytesIO()
+    waiver_writer.write(waiver_buffer)
+    return waiver_buffer
+
 # ─── PDF Invoice Generator ─────────────────────────────────────────────────
 def generate_invoice(data, original_po, invoice_number):
     invoice_pdf = FPDF()
     invoice_pdf.add_page()
     invoice_pdf.set_font("Arial", size=12)
 
-    # Header
     invoice_pdf.set_font("Arial", 'B', 16)
     invoice_pdf.cell(200, 10, txt="INVOICE", ln=1, align="C")
     invoice_pdf.set_font("Arial", size=12)
@@ -91,18 +121,15 @@ def generate_invoice(data, original_po, invoice_number):
     invoice_pdf.cell(100, 10, txt=f"Invoice Date: {datetime.today().strftime('%m/%d/%Y')}", ln=1)
     invoice_pdf.cell(100, 10, txt=f"Terms: NET30", ln=1)
 
-    # Logo Placeholder
     invoice_pdf.set_font("Arial", 'B', 14)
     invoice_pdf.cell(200, 10, txt="I'll Klean It", ln=1, align="L")
 
-    # Customer Info
     invoice_pdf.set_font("Arial", size=12)
     invoice_pdf.cell(200, 10, txt="Customer: Granville Homes", ln=1)
     invoice_pdf.cell(200, 10, txt="1396 W Herndon", ln=1)
     invoice_pdf.cell(200, 10, txt="Fresno, CA 93711", ln=1)
     invoice_pdf.ln(5)
 
-    # Invoice Table
     invoice_pdf.set_font("Arial", 'B', 12)
     invoice_pdf.cell(60, 10, txt="PO#", border=1)
     invoice_pdf.cell(80, 10, txt="Description", border=1)
@@ -120,24 +147,25 @@ def generate_invoice(data, original_po, invoice_number):
     invoice_pdf.set_font("Arial", 'B', 12)
     invoice_pdf.cell(200, 10, txt="THANK YOU FOR YOUR BUSINESS!", ln=1, align="C")
 
-    # Signature
     invoice_pdf.set_font("Courier", 'I', 18)
     invoice_pdf.cell(200, 20, txt="Luis Moreno", ln=1, align="C")
 
     output_str = invoice_pdf.output(dest='S').encode('latin1')
     buffer = BytesIO(output_str)
 
-    # Append original PO pages
+    waiver_pdf = generate_waiver_pdf("3252 Vermont Ave\nClovis, CA 93619", data.get('amount', '0.00'))
+
     result_pdf = fitz.open()
-    result_pdf.insert_pdf(fitz.open(stream=buffer.getvalue(), filetype="pdf"))
-    result_pdf.insert_pdf(original_po)
+    result_pdf.insert_pdf(fitz.open(stream=buffer, filetype="pdf"))  # Invoice
+    result_pdf.insert_pdf(original_po)                               # PO
+    result_pdf.insert_pdf(fitz.open(stream=waiver_pdf.getvalue(), filetype="pdf"))  # Waiver
 
     final_buffer = BytesIO()
     result_pdf.save(final_buffer)
     return final_buffer
 
 # ─── Streamlit UI ──────────────────────────────────────────────────────────
-st.title("📄 Invoice Generator Prototype")
+st.title("📄 Invoice Generator with Waiver")
 
 uploaded_files = st.file_uploader("Upload Client PO(s) (PDF)", type="pdf", accept_multiple_files=True)
 combined_invoice = fitz.open()
@@ -165,7 +193,6 @@ if uploaded_files:
             invoice_pdf = generate_invoice(manual_data, original_po, invoice_number)
             st.download_button("Download Invoice PDF", data=invoice_pdf, file_name=f"{invoice_number}.pdf")
 
-        # Always add to combined output
         manual_data = {
             "po_number": po_number,
             "description": description,
