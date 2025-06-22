@@ -9,7 +9,6 @@ import os
 from PyPDF2 import PdfReader, PdfWriter
 from docx import Document
 import tempfile
-from docx2pdf import convert  # make sure this is installed
 import shutil
 import subprocess
 
