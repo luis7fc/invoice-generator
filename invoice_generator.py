@@ -11,13 +11,14 @@ from docx import Document
 import tempfile
 from docx2pdf import convert  # make sure this is installed
 import shutil
+import subprocess
 
 def generate_waiver_pdf_smart(job_location, amount, through_date, signature="LM"):
-    # Load template
+    from docx import Document
+
     template_path = "waiver_template.docx"
     doc = Document(template_path)
 
-    # Replace placeholders
     replacements = {
         "{{job_location}}": job_location,
         "{{through_date}}": through_date,
@@ -33,24 +34,22 @@ def generate_waiver_pdf_smart(job_location, amount, through_date, signature="LM"
                     if key in run.text:
                         run.text = run.text.replace(key, val)
 
-    # Save to temporary DOCX
-    temp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
-    doc.save(temp_docx.name)
+    # Save filled docx
+    temp_dir = tempfile.mkdtemp()
+    filled_docx_path = os.path.join(temp_dir, "waiver_filled.docx")
+    filled_pdf_path = os.path.join(temp_dir, "waiver_filled.pdf")
+    doc.save(filled_docx_path)
 
-    # Convert to PDF
-    temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    convert(temp_docx.name, temp_pdf.name)
+    # Convert using LibreOffice CLI
+    subprocess.run([
+        "libreoffice", "--headless", "--convert-to", "pdf", filled_docx_path,
+        "--outdir", temp_dir
+    ], check=True)
 
-    # Read into BytesIO for merging
-    with open(temp_pdf.name, "rb") as f:
+    with open(filled_pdf_path, "rb") as f:
         waiver_pdf = BytesIO(f.read())
 
-    # Clean up
-    temp_docx.close()
-    temp_pdf.close()
-    os.unlink(temp_docx.name)
-    os.unlink(temp_pdf.name)
-
+    shutil.rmtree(temp_dir)
     return waiver_pdf
 
 
