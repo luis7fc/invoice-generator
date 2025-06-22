@@ -12,6 +12,12 @@ from PyPDF2 import PdfReader, PdfWriter
 def extract_po_details(pdf_file):
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
     text = "\n".join([page.get_text() for page in doc])
+    # Try to extract job location address from top right
+    location_match = re.search(r"Lot:\s*\d+\s*\n(.*?)\n(Fresno|Clovis), CA \d{5}", text)
+    if location_match:
+        job_location = f"{location_match.group(1).strip()}\n{location_match.group(2)}, CA"
+    else:
+        job_location = "Unknown"
 
     po_number = None
     match = re.search(r"[A-Za-z0-9]{4,}\s*-\s*[A-Za-z0-9]{1,}\s*-\s*\d{6}", text, re.IGNORECASE)
@@ -60,6 +66,8 @@ def extract_po_details(pdf_file):
         result["amount"] = details["amount"].group(1).strip()
     if details["customer"]:
         result["customer"] = "Granville Homes"
+    
+    result["job_location"] = job_location
 
     return result, doc
 
@@ -99,7 +107,8 @@ def generate_waiver_pdf(job_location, amount):
     overlay.cell(100, 10, txt="LM")
 
     overlay_stream = BytesIO()
-    overlay.output(overlay_stream)
+    overlay_bytes = overlay.output(dest="S").encode("latin1")
+    overlay_stream = BytesIO(overlay_bytes)
     overlay_reader = PdfReader(BytesIO(overlay_stream.getvalue()))
     page.merge_page(overlay_reader.pages[0])
 
@@ -153,8 +162,8 @@ def generate_invoice(data, original_po, invoice_number):
     output_str = invoice_pdf.output(dest='S').encode('latin1')
     buffer = BytesIO(output_str)
 
-    waiver_pdf = generate_waiver_pdf("3252 Vermont Ave\nClovis, CA 93619", data.get('amount', '0.00'))
-
+    waiver_pdf = generate_waiver_pdf(data.get('job_location', 'Unknown'), data.get('amount', '0.00'))
+    
     result_pdf = fitz.open()
     result_pdf.insert_pdf(fitz.open(stream=buffer, filetype="pdf"))  # Invoice
     result_pdf.insert_pdf(original_po)                               # PO
@@ -187,7 +196,8 @@ if uploaded_files:
             manual_data = {
                 "po_number": po_number,
                 "description": description,
-                "amount": amount
+                "amount": amount,
+                "job_location": extracted.get("job_location", "Unknown")
             }
             invoice_number = get_next_invoice_number()
             invoice_pdf = generate_invoice(manual_data, original_po, invoice_number)
@@ -196,7 +206,8 @@ if uploaded_files:
         manual_data = {
             "po_number": po_number,
             "description": description,
-            "amount": amount
+            "amount": amount,
+            "job_location": extracted.get("job_location", "Unknown")
         }
         invoice_number = get_next_invoice_number()
         pdf = generate_invoice(manual_data, original_po, invoice_number)
