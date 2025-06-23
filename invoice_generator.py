@@ -11,6 +11,9 @@ from docx import Document
 import tempfile
 import shutil
 import subprocess
+import pandas as pd
+
+po_summary_data = []
 
 def generate_waiver_pdf_smart(job_location, amount, through_date, signature="LM"):
     from docx import Document
@@ -192,34 +195,63 @@ def generate_invoice(data, original_po, invoice_number):
     return final_buffer
 
 # ─── Streamlit UI ──────────────────────────────────────────────────────────
-st.title("📄 Invoice Generator with Waiver")
+st.title("📄 Invoice Generator & PO Summary")
 
-uploaded_files = st.file_uploader("Upload Client PO(s) (PDF)", type="pdf", accept_multiple_files=True)
-combined_invoice = fitz.open()
+tab1, tab2 = st.tabs(["🧾 Generate Invoices", "📊 PO Summary CSV"])
 
-if uploaded_files:
-    for uploaded_file in uploaded_files:
-        with st.spinner(f"Processing {uploaded_file.name}..."):
-            extracted, original_po = extract_po_details(uploaded_file)
+with tab1:
+    uploaded_files = st.file_uploader("Upload Client PO(s) (PDF)", type="pdf", accept_multiple_files=True)
+    combined_invoice = fitz.open()
 
-        st.subheader(f"Extracted Info from {uploaded_file.name}")
-        st.json(extracted)
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            with st.spinner(f"Processing {uploaded_file.name}..."):
+                extracted, original_po = extract_po_details(uploaded_file)
 
-        st.subheader("Manual Edits (Optional)")
-        po_number = st.text_input(f"PO Number for {uploaded_file.name}", value=extracted.get("po_number", ""), key=f"po_{uploaded_file.name}")
-        description = st.text_input(f"Description for {uploaded_file.name}", value=extracted.get("description", ""), key=f"desc_{uploaded_file.name}")
-        amount = st.text_input(f"Amount ($) for {uploaded_file.name}", value=extracted.get("amount", ""), key=f"amt_{uploaded_file.name}")
+            st.subheader(f"Extracted Info from {uploaded_file.name}")
+            st.json(extracted)
 
-        manual_data = {
-            "po_number": po_number,
-            "description": description,
-            "amount": amount,
-            "job_location": extracted.get("job_location", "Unknown")
-        }
-        invoice_number = get_next_invoice_number()
-        pdf = generate_invoice(manual_data, original_po, invoice_number)
-        combined_invoice.insert_pdf(fitz.open(stream=pdf.getvalue(), filetype="pdf"))
+            st.subheader("Manual Edits (Optional)")
+            po_number = st.text_input(f"PO Number for {uploaded_file.name}", value=extracted.get("po_number", ""), key=f"po_{uploaded_file.name}")
+            description = st.text_input(f"Description for {uploaded_file.name}", value=extracted.get("description", ""), key=f"desc_{uploaded_file.name}")
+            amount = st.text_input(f"Amount ($) for {uploaded_file.name}", value=extracted.get("amount", ""), key=f"amt_{uploaded_file.name}")
 
-    final_batch = BytesIO()
-    combined_invoice.save(final_batch)
-    st.download_button("Download Combined Invoice Batch PDF", data=final_batch, file_name="Combined_Invoices.pdf")
+            manual_data = {
+                "po_number": po_number,
+                "description": description,
+                "amount": amount,
+                "job_location": extracted.get("job_location", "Unknown")
+            }
+            invoice_number = get_next_invoice_number()
+            pdf = generate_invoice(manual_data, original_po, invoice_number)
+            combined_invoice.insert_pdf(fitz.open(stream=pdf.getvalue(), filetype="pdf"))
+
+            # Log for summary tab
+            po_summary_data.append({
+                "Invoice Number": invoice_number,
+                "PO Number": po_number,
+                "Job": extracted.get("job", ""),
+                "Lot": extracted.get("lot", ""),
+                "Description": description,
+                "Amount": float(amount.replace(",", "").replace("$", "") or 0),
+            })
+
+        final_batch = BytesIO()
+        combined_invoice.save(final_batch)
+        st.download_button("Download Combined Invoice Batch PDF", data=final_batch, file_name="Combined_Invoices.pdf")
+
+with tab2:
+    st.subheader("📊 PO Summary & Payment Tracking")
+    if po_summary_data:
+        df_summary = pd.DataFrame(po_summary_data)
+        df_summary["Amount"] = df_summary["Amount"].round(2)
+        total = df_summary["Amount"].sum()
+
+        st.dataframe(df_summary, use_container_width=True)
+        st.markdown(f"**Total Billed: ${total:,.2f}**")
+
+        csv_buffer = BytesIO()
+        df_summary.to_csv(csv_buffer, index=False)
+        st.download_button("⬇️ Download PO Summary CSV", csv_buffer.getvalue(), file_name="PO_Summary.csv", mime="text/csv")
+    else:
+        st.info("No PO summary available yet. Process files in the 'Generate Invoices' tab first.")
