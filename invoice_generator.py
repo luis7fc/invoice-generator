@@ -327,7 +327,11 @@ with tab1:
             }
             invoice_number = get_next_invoice_number()
             pdf = generate_invoice(manual_data, original_po, invoice_number)
-            combined_invoice.insert_pdf(fitz.open(stream=pdf.getvalue(), filetype="pdf"))
+            single_invoice = fitz.open(stream=pdf.getvalue(), filetype="pdf")
+            if len(combined_invoice) > 0:
+                combined_invoice.new_page()  # clean page break
+            combined_invoice.insert_pdf(single_invoice)
+            single_invoice.close()
 
             # Log for summary tab
             po_summary_data.append({
